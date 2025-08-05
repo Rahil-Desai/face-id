@@ -8,13 +8,19 @@ export default function FaceIdLogin() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const loadModels = async () => {
       setStatus('Loading AI models...');
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      setLoading(false);
-      setStatus('Models loaded. Please allow camera access.');
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        setLoading(false);
+        setStatus('Models loaded. Please allow camera access.');
+      } catch (error) {
+        setStatus('Error loading models. Please refresh the page.');
+        setLoading(false);
+      }
     };
     loadModels();
   }, []);
@@ -26,43 +32,108 @@ export default function FaceIdLogin() {
         videoRef.current.srcObject = stream;
         setStatus('Camera started. Look at the camera and click Login.');
       })
-      .catch(() => setStatus('Camera access denied.'));
+      .catch(() => setStatus('Camera access denied. Please allow camera permissions.'));
   };
 
   const handleLogin = async () => {
+    if (!videoRef.current) return;
+    
+    setIsProcessing(true);
     setStatus('Detecting face...');
-    const detection = await faceapi.detectSingleFace(
-      videoRef.current,
-      new faceapi.TinyFaceDetectorOptions()
-    );
-    if (detection) {
-      setFaceDetected(true);
-      setStatus('Face detected! Login successful.');
-    } else {
-      setStatus('No face detected. Try again.');
+    
+    try {
+      const detection = await faceapi.detectSingleFace(
+        videoRef.current,
+        new faceapi.TinyFaceDetectorOptions()
+      );
+      
+      if (detection) {
+        setFaceDetected(true);
+        setStatus('Face detected! Login successful.');
+      } else {
+        setStatus('No face detected. Please look directly at the camera.');
+      }
+    } catch (error) {
+      setStatus('Error detecting face. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
+  const resetLogin = () => {
+    setFaceDetected(false);
+    setStatus('Ready to login. Click "Start Camera" to begin.');
+  };
+
+  const getStatusClass = () => {
+    if (loading) return 'status-loading';
+    if (faceDetected) return 'status-success';
+    if (status.includes('Error') || status.includes('denied')) return 'status-error';
+    return 'status-info';
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 40 }}>
-      <h2>Face ID Login</h2>
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        width={320}
-        height={240}
-        style={{ border: '1px solid #ccc', borderRadius: 8, marginBottom: 16 }}
-      />
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={startVideo} disabled={loading || faceDetected} style={{ marginRight: 8 }}>
-          Start Camera
-        </button>
-        <button onClick={handleLogin} disabled={loading || faceDetected}>
-          Login with Face ID
-        </button>
+    <div className="face-id-container">
+      <h2 className="component-title">Face ID Login</h2>
+      
+      <div className="video-container">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          width={320}
+          height={240}
+          className="video-element"
+        />
+        {!loading && !faceDetected && (
+          <div className="camera-overlay"></div>
+        )}
       </div>
-      <div style={{ minHeight: 24, color: faceDetected ? 'green' : 'black' }}>{status}</div>
+      
+      <div className="button-group">
+        <button 
+          onClick={startVideo} 
+          disabled={loading || faceDetected} 
+          className="btn btn-primary"
+        >
+          {loading ? (
+            <>
+              <span className="spinner"></span>
+              Loading...
+            </>
+          ) : (
+            'Start Camera'
+          )}
+        </button>
+        
+        <button 
+          onClick={handleLogin} 
+          disabled={loading || faceDetected || isProcessing} 
+          className="btn btn-secondary"
+        >
+          {isProcessing ? (
+            <>
+              <span className="spinner"></span>
+              Processing...
+            </>
+          ) : (
+            'Login with Face ID'
+          )}
+        </button>
+        
+        {faceDetected && (
+          <button 
+            onClick={resetLogin} 
+            className="btn btn-success"
+          >
+            Login Again
+          </button>
+        )}
+      </div>
+      
+      <div className={`status-message ${getStatusClass()}`}>
+        {status}
+      </div>
     </div>
   );
 } 
